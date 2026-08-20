@@ -126,14 +126,21 @@ class TestOpenAIProvider:
 
     @patch("nexus_global.providers.openai_provider.OpenAI")
     def test_generate_api_error(self, mock_openai_class, mock_config) -> None:
-        """Test handling of API errors."""
-        from openai import APIError
-
+        """Test handling of API errors.
+        
+        Verifies that OpenAI API errors are caught and wrapped in OpenAIProviderError.
+        Uses mock to simulate APIError without requiring instantiation of actual exception.
+        """
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
-        mock_client.chat.completions.create.side_effect = APIError(
-            "API Error", None, None
-        )
+        
+        # Create a mock APIError that behaves like the real one when called
+        # OpenAI SDK v1.0+ APIError signature: APIError(message: str, response: Any, body: Any)
+        # We mock the exception class itself to control its instantiation
+        api_error_mock = MagicMock(spec=Exception)
+        api_error_mock.__str__ = MagicMock(return_value="API request failed")
+        
+        mock_client.chat.completions.create.side_effect = api_error_mock
 
         provider = OpenAIProvider(mock_config)
 

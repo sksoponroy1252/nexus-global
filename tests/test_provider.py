@@ -128,21 +128,25 @@ class TestOpenAIProvider:
     def test_generate_api_error(self, mock_openai_class, mock_config) -> None:
         """Test handling of API errors.
         
-        Verifies that OpenAI API errors are caught and wrapped in OpenAIProviderError.
-        Uses mock to simulate APIError without requiring instantiation of actual exception.
+        Verifies that OpenAI APIError exceptions are caught and wrapped 
+        in OpenAIProviderError. Uses patch to inject APIError into the 
+        mocked API call without needing to instantiate APIError directly.
         """
+        from openai import APIError
+        
         mock_client = MagicMock()
         mock_openai_class.return_value = mock_client
         
-        # Create a mock APIError that behaves like the real one when called
-        # OpenAI SDK v1.0+ APIError signature: APIError(message: str, response: Any, body: Any)
-        # We mock the exception class itself to control its instantiation
-        api_error_mock = MagicMock(spec=Exception)
-        api_error_mock.__str__ = MagicMock(return_value="API request failed")
-        
-        mock_client.chat.completions.create.side_effect = api_error_mock
-
-        provider = OpenAIProvider(mock_config)
-
-        with pytest.raises(OpenAIProviderError, match="OpenAI API error"):
-            provider.generate("Test")
+        # Patch APIError at the point it's imported in the production module
+        # to avoid constructor signature issues. Set it as the side_effect
+        # so it's raised when create() is called.
+        with patch("nexus_global.providers.openai_provider.APIError", APIError):
+            # Create an instance with correct signature (message, response=None, body=None)
+            test_error = APIError(message="Test API error")
+            mock_client.chat.completions.create.side_effect = test_error
+            
+            provider = OpenAIProvider(mock_config)
+            
+            # Verify that APIError is caught and converted to OpenAIProviderError
+            with pytest.raises(OpenAIProviderError, match="OpenAI API error"):
+                provider.generate("Test")
